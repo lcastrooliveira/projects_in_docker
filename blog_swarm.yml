@@ -1,8 +1,8 @@
-version: "3"
+version: "3.2"
 
 services:
   db_server:
-    image: db
+    image: 10.136.119.106:5000/db
     networks:
       - blog_network
     deploy:
@@ -10,10 +10,15 @@ services:
       restart_policy:
         condition: on-failure
     volumes:
-      - database_volume:/data/db
+      - type: volume
+        source: dbvol
+        target: /data/db
+      - type: volume
+        source: dbvol
+        target: /data/configuredb
   
   app_server:
-    image: app
+    image: 10.136.119.106:5000/app
     networks:
       - blog_network
     depends_on:
@@ -24,11 +29,11 @@ services:
         condition: on-failure
   
   web_server:
-    image: web
+    image: 10.136.119.106:5000/web
     networks:
       - blog_network
     ports:
-      - 8080:80
+      - 80:80
     depends_on:
       - app_server
     deploy:
@@ -39,4 +44,10 @@ services:
 networks:
   blog_network:
 volumes:
-  database_volume:
+  dbvol:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: addr=10.136.119.106,rw,nolock
+      device: ":/var/nfs/dbvol"
+
