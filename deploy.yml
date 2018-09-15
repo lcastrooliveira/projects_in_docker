@@ -1,0 +1,103 @@
+---
+- hosts: all
+  become: true
+  vars:
+    - swarm_address: 10.138.236.164
+    - db_image: db
+    - app_image: app
+    - webserver_image: web
+    - db_service: db_server
+    - app_service: app_server
+    - webserver_service: web_server
+    - db_data_vol: /opt/mongo/db
+    - db_configdb_vol: /opt/mongo/configdb
+    - app_replicas: 3
+    - webserver_replicas: 5
+    - webserver_port: 80
+    - network_name: blog_network
+  tasks:
+    - name: Install the prerequisites
+      apt: name={{item}} state=installed
+      with_items:
+        - python-pip
+        - python-apt
+    - name: Install docker-py
+      pip:
+        name: docker-py
+        state: present
+    - name: Install the docker apt repository key
+      apt_key:
+        url: "https://download.docker.com/linux/ubuntu/gpg"
+        state: present
+    - name: Install the Docker apt repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+    - name: Install Docker-ce
+      apt:
+        name: docker-ce
+        update_cache: yes
+        state: present
+    - name: Upload the DB image
+      synchronize:
+        src: db/
+        dest: /opt/db
+    - name: Upload the APP image
+      synchronize:
+        src: app/
+        dest: /opt/app
+    - name: Upload the WS image
+      synchronize:
+        src: web/
+        dest: /opt/web
+    - name: Build the DB image
+      docker_image:
+        name: "{{db_image}}"
+        path: /opt/db
+    - name: Build the APP image
+      docker_image:
+        name: "{{app_image}}"
+        path: /opt/app
+    - name: Build the WS image
+      docker_image:
+        name: "{{webserver_image}}"
+        path: /opt/web
+    - name: Is the swarm already created?
+      command: "docker node ls"
+      ignore_errors: True
+      register: swarm_created
+    - name: Create the docker swarm
+      command: "docker swarm init --advertise-addr {{swarm_address}}"
+      when: swarm_created|failed
+    - name: create the swarm network
+      docker_network:
+        name: "{{network_name}}"
+        driver: overlay
+    - name: Create the necessary paths for the DB volumes
+      file: path="{{item}}" state=directory recurse=yes
+      with_items:
+        - "{{db_data_vol}}"
+        - "{{db_configdb_vol}}"
+    - name: Is the DB serice created?
+      command: "docker service ps {{db_service}}"
+      ignore_errors: True
+      register: db_service_running
+    - name: Create the DB service
+      command: "docker service create -d --name {{db_service}} --network {{network_name}} --mount type=bind,source={{db_data_vol}},target=/data/db --mount type=bind,source={{db_configdb_vol}},target=/data/confidb {{db_image}}"
+      when: db_service_running|failed
+
+    - name: Is the APP serice created?
+      command: "docker service ps {{app_service}}"
+      ignore_errors: True
+      register: app_service_running
+    - name: Run the App service
+      command: "docker service create -d --name {{app_service}} --network {{network_name}} --replicas {{app_replicas}} {{app_image}}"
+      when: app_service_running|failed
+
+    - name: Is the Webserver service created?
+      command: "docker service ps {{webserver_service}}"
+      ignore_errors: True
+      register: webserver_service_running
+    - name: Run the Webserver service
+      command: "docker service create -d --name {{webserver_service}} --network {{network_name}} --replicas {{webserver_replicas}} -p {{webserver_port}}:80 {{webserver_image}}"
+      when: webserver_service_running|failed
