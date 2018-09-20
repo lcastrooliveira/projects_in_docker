@@ -2,7 +2,7 @@ version: "3.2"
 
 services:
   db_server:
-    image: 10.136.119.106:5000/db
+    image: lcastrooliveira/db
     networks:
       - blog_network
     deploy:
@@ -18,7 +18,7 @@ services:
         target: /data/configuredb
   
   app_server:
-    image: 10.136.119.106:5000/app
+    image: lcastrooliveira/app
     networks:
       - blog_network
     depends_on:
@@ -29,7 +29,7 @@ services:
         condition: on-failure
   
   web_server:
-    image: 10.136.119.106:5000/web
+    image: lcastrooliveira/web
     networks:
       - blog_network
     ports:
@@ -45,9 +45,7 @@ networks:
   blog_network:
 volumes:
   dbvol:
-    driver: local
+    driver: local-persist
     driver_opts:
-      type: "nfs"
-      o: addr=10.136.119.106,rw,nolock
-      device: ":/var/nfs/dbvol"
+      mountpoint: /swarm/volumes
 
